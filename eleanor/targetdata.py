@@ -190,8 +190,7 @@ class TargetData(object):
 
                 self.get_tpf_from_postcard(source.coords, source.postcard, height, width, bkg_size, save_postcard, source)
                 self.set_quality()
-                if not local and do_pca:
-                    self.get_cbvs()
+                self.get_cbvs(local=local)
 
                 self.create_apertures(height, width)
 
@@ -584,17 +583,25 @@ class TargetData(object):
         self.modes    = modes
         self.pca_flux = flux - np.dot(A[:,0:modes], matrix(flux)[0:modes])
 
-    def get_cbvs(self):
+    def get_cbvs(self, local=False):
         """ Obtains the cotrending basis vectors (CBVs) as convolved down from the short-cadence targets.
         Parameters
         ----------
         """
-        matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector,
-                                                                                                                                                     self.source_info.camera,
-                                                                                                                                                     self.source_info.chip))
-        A = [float(x) for x in matrix_file.read().decode('utf-8').split()]
-        cbvs = np.asarray(A)
-        self.cbvs = np.reshape(cbvs, (len(self.time), 16))
+
+        if local:
+            ldir = os.path.split(os.path.split(__file__)[0])[0]
+            matrix_file = 'metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector, self.source_info.camera, self.source_info.chip)
+            matrix_file = os.path.join(ldir, matrix_file)
+            cbvs = np.loadtxt(matrix_file)
+        else:
+            matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector,
+                                                                                                                                                         self.source_info.camera,
+                                                                                                                                                         self.source_info.chip))
+            A = [float(x) for x in matrix_file.read().decode('utf-8').split()]
+            cbvs = np.asarray(A)
+            cbvs = np.reshape(cbvs, (len(self.time), 16))
+        self.cbvs = cbvs
         return
 
 
@@ -989,7 +996,7 @@ class TargetData(object):
                                      comment='Associated Gaia ID'))
         self.header.append(fits.Card(keyword='SECTOR', value=self.source_info.sector,
                                      comment='Sector'))
-        self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip.value,
+        self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip,
                                      comment='CCD'))
         self.header.append(fits.Card(keyword='CHIPPOS1', value=self.source_info.position_on_chip[0],
                                      comment='central x pixel of TPF in FFI chip'))
