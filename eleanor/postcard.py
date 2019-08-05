@@ -7,6 +7,8 @@ import numpy as np
 import warnings
 import pandas as pd
 import copy
+from astropy.stats import SigmaClip
+from photutils import MMMBackground
 from .mast import crossmatch_by_position
 from urllib.request import urlopen
 
@@ -48,6 +50,7 @@ class Postcard(object):
         (`x`, `y`) coordinates corresponding to the location of
         the postcard's (0,0) pixel on the FFI.
     """
+
     def __init__(self, filename, ELEANORURL, location=None, local=False,
                  localdir=None):
         if local and localdir is not None:
@@ -203,11 +206,10 @@ class Postcard(object):
 
 class Postcard_tesscut(object):
     """TESS FFI data for one postcard across one sector.
-
-    A postcard is an rectangular subsection cut out from the FFIs.
-    It's like a TPF, but bigger.
-    The Postcard object contains a stack of these cutouts from all available
-    FFIs during a given sector of TESS observations.
+    
+    TESSCut is a service from MAST to produce TPF cutouts from the TESS FFIs. If
+    `eleanor.Source()` is called with `tc=True`, TESSCut is used to produce a large
+    postcard-like cutout region rather than downlading a standard eleanor postcard.
 
     Parameters
     ----------
@@ -240,6 +242,9 @@ class Postcard_tesscut(object):
 
         if location is None:
             self.local_path = os.path.join(os.path.expanduser('~'), '.eleanor/tesscut')
+        else:
+            self.local_path = location
+
         self.hdu = cutout
 
 
@@ -354,9 +359,12 @@ class Postcard_tesscut(object):
 
     @property
     def bkg(self):
-        return np.nanmedian(self.hdu[1].data['FLUX_BKG'], axis=(1,2))
-
-    @property
+        sigma_clip = SigmaClip(sigma=3.)
+        bkg = MMMBackground(sigma_clip=sigma_clip)
+        b = bkg.calc_background(self.flux, axis=(1,2))
+        return b
+    
+    @property 
     def barycorr(self):
         return self.hdu[1].data['TIMECORR']
 
