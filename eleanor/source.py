@@ -68,26 +68,36 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
         raise TypeError("Sectors needs to be either 'all' or a type(list) to work.")
 
 
-def load_postcard_guide(sector):
+def load_postcard_guide(sector, local=False):
     """Load and return the postcard coordinates guide."""
-    try:
-        user_agent = 'eleanor 0.1.6'
-        values = {'name': 'eleanor',
-                  'language': 'Python' }
-        headers = {'User-Agent': user_agent}
-        
-        data = urllib.parse.urlencode(values)
-        data = data.encode('ascii')
-        
-        guide_link = 'https://users.flatironinstitute.org/dforeman/public_www/tess/postcards_test/s{0:04d}/postcard.guide'.format(sector)
-        
-        req = urllib.request.Request(guide_link, data, headers)
-        with urllib.request.urlopen(req) as response:
-            guide = response.read().decode('utf-8')
-        
-        guide = Table.read(guide, format='ascii.basic') # guide to postcard locations
-    except urllib.error.HTTPError:
-        return None
+    if local:
+        try:
+            LOCALDIR = '/data/tessraid/data/local_eleanor/postcards/'
+            guide_link = os.path.join(LOCALDIR, 's{0:04d}'.format(sector),
+                                      'postcard.guide')
+            guide = Table.read(guide_link, format='ascii.basic')
+        except FileNotFoundError:
+            return None
+    else:
+        try:
+            from .version import __version__
+            user_agent = f'eleanor {__version__}'
+            values = {'name': 'eleanor',
+                      'language': 'Python' }
+            headers = {'User-Agent': user_agent}
+
+            data = urllib.parse.urlencode(values)
+            data = data.encode('ascii')
+
+            guide_link = 'https://users.flatironinstitute.org/dforeman/public_www/tess/postcards_test/s{0:04d}/postcard.guide'.format(sector)
+
+            req = urllib.request.Request(guide_link, data, headers)
+            with urllib.request.urlopen(req) as response:
+                guide = response.read().decode('utf-8')
+
+            guide = Table.read(guide, format='ascii.basic') # guide to postcard locations
+        except urllib.error.HTTPError:
+            return None
     return guide
 
 
@@ -131,14 +141,15 @@ class Source(object):
     all_postcards : list of strs
         Names of all postcards where the source appears.
     """
-    def __init__(self, tic=None, gaia=None, coords=None, fn=None, sector=None, fn_dir=None, tc=False):
+    def __init__(self, tic=None, gaia=None, coords=None, fn=None, sector=None, fn_dir=None, tc=False, local=False):
         self.tic     = tic
         self.gaia    = gaia
         self.coords  = coords
         self.fn      = fn
         self.premade = False
         self.usr_sec = sector
-        self.tc      = tc
+        self.tc      = False
+        self.local = local
 
         if fn_dir is None:
             self.fn_dir = os.path.join(os.path.expanduser('~'), '.eleanor')
@@ -160,7 +171,6 @@ class Source(object):
             self.camera   = hdr['CAMERA']
             self.chip     = hdr['CHIP']
             self.position_on_chip = (hdr['CHIPPOS1'], hdr['CHIPPOS2'])
-#            self.position_on_postcard = (hdr['POSTPOS1'], hdr['POSTPOS2'])
 
         else:
             if self.coords is not None:
@@ -186,18 +196,17 @@ class Source(object):
             else:
                 assert False, ("Source: one of the following keywords must be given: "
                                "tic, gaia, coords, fn.")
-                
 
-            self.tess_mag = self.tess_mag[0]            
-            if tc == False:
+            self.tess_mag = self.tess_mag[0]
+            if not tc:
                 self.locate_on_tess() # sets sector, camera, chip, postcard,
                                   # position_on_chip, position_on_postcard
-            if tc == True:
+            else:
                 self.tesscut_size = 31
                 self.locate_with_tesscut() # sets sector, camera, chip, postcard,
                                   # position_on_chip, position_on_postcard
-            
-                
+
+
         self.ELEANORURL = 'https://users.flatironinstitute.org/dforeman/public_www/tess/postcards_test/s{0:04d}/{1}-{2}/'.format(self.sector,
                                                                                                                                  self.camera,
                                                                                                                                  self.chip)
@@ -238,7 +247,7 @@ class Source(object):
 
         if self.usr_sec is not None:
             if type(self.usr_sec) == int:
-                guide = load_postcard_guide(self.usr_sec)
+                guide = load_postcard_guide(self.usr_sec, local=self.local)
                 if guide is None:
                     raise SearchError("Sorry, this sector isn't available yet. We're working on it!")
                 else:
@@ -247,7 +256,7 @@ class Source(object):
             # Searches for the most recent sector the object was observed in
             elif self.usr_sec.lower() == 'recent':
                 for s in np.arange(15,0,-1):
-                    guide = load_postcard_guide(s)
+                    guide = load_postcard_guide(s, local=self.local)
                     if guide is not None:
                         cam_chip_loop(s)
                         if self.sector is not None:
@@ -263,7 +272,7 @@ class Source(object):
         Sets attributes postcard, position_on_postcard, all_postcards.
         """
         self.locate_on_chip()
-        guide = load_postcard_guide(self.sector)
+        guide = load_postcard_guide(self.sector, local=self.local)
 
         if self.sector is None:
             return
@@ -309,22 +318,22 @@ class Source(object):
         postcard_pos_on_ffi = (guide['CEN_X'][i] - guide['POST_H'][i]/2.,
                                 guide['CEN_Y'][i] - guide['POST_W'][i]/2.)
         self.position_on_postcard = xy - postcard_pos_on_ffi # as accurate as FFI WCS
-        
+
 
     def locate_with_tesscut(self):
         """Finds the best TESS postcard(s) and the position of the source on postcard.
         Sets attributes postcard, position_on_postcard, all_postcards.
          sector, camera, chip, position_on_chip.
-        
+
         """
         self.postcard = []
         self.position_on_postcard = []
         self.all_postcards = []
-        
+
         self.tc = True
-        
+
         coord = SkyCoord(self.coords[0], self.coords[1], unit="deg")
-        
+
         sector_table = Tesscut.get_sectors(coord)
         self.sector = self.usr_sec
 
@@ -342,12 +351,12 @@ class Source(object):
         else:
             self.postcard_path = fn_exists
             cutout = fits.open(fn_exists)
-        
+
         self.cutout = cutout
-        
+
         xcoord = cutout[1].header['1CRV4P']
         ycoord = cutout[1].header['2CRV4P']
-        
+
         self.position_on_chip = np.array([xcoord, ycoord])
 
 

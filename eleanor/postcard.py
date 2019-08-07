@@ -17,25 +17,25 @@ __all__ = ['Postcard']
 
 class Postcard(object):
     """TESS FFI data for one postcard across one sector.
-    
-    A postcard is an rectangular subsection cut out from the FFIs. 
-    It's like a TPF, but bigger. 
-    The Postcard object contains a stack of these cutouts from all available 
+
+    A postcard is an rectangular subsection cut out from the FFIs.
+    It's like a TPF, but bigger.
+    The Postcard object contains a stack of these cutouts from all available
     FFIs during a given sector of TESS observations.
-    
+
     Parameters
     ----------
     filename : str
         Filename of the downloaded postcard.
     location : str, optional
         Filepath to `filename`.
-    
+
     Attributes
     ----------
     dimensions : tuple
         (`x`, `y`, `time`) dimensions of postcard.
     flux, flux_err : numpy.ndarray
-        Arrays of shape `postcard.dimensions` containing flux or error on flux 
+        Arrays of shape `postcard.dimensions` containing flux or error on flux
         for each pixel.
     time : float
         ?
@@ -44,15 +44,22 @@ class Postcard(object):
     center_radec : tuple
         RA & Dec coordinates of the postcard's central pixel.
     center_xy : tuple
-        (`x`, `y`) coordinates corresponding to the location of 
+        (`x`, `y`) coordinates corresponding to the location of
         the postcard's central pixel on the FFI.
     origin_xy : tuple
-        (`x`, `y`) coordinates corresponding to the location of 
+        (`x`, `y`) coordinates corresponding to the location of
         the postcard's (0,0) pixel on the FFI.
     """
-    def __init__(self, filename, ELEANORURL, location=None):
-        if location is not None:
-            self.filename = os.path.join(location, filename)
+
+    def __init__(self, filename, ELEANORURL, location=None, local=False,
+                 localdir=None):
+        if local and localdir is not None:
+            self.filename = os.path.join(localdir, filename)
+            self.local_path = self.filename
+            self.hdu = fits.open(self.local_path)
+
+        elif location is not None:
+            self.filename = '{}{}'.format(location, filename)
             self.local_path = copy.copy(self.filename)
             self.hdu = fits.open(self.local_path)
         else:
@@ -80,21 +87,21 @@ class Postcard(object):
 
     def plot(self, frame=0, ax=None, scale='linear', **kwargs):
         """Plots a single frame of a postcard.
-        
+
         Parameters
         ----------
         frame : int, optional
             Index of frame. Default 0.
-        
+
         ax : matplotlib.axes.Axes, optional
             Axes on which to plot. Creates a new object by default.
-        
+
         scale : str
             Scaling for colorbar; acceptable inputs are 'linear' or 'log'.
             Default 'linear'.
-        
+
         **kwargs : passed to matplotlib.pyplot.imshow
-        
+
         Returns
         -------
         ax : matplotlib.axes.Axes
@@ -187,16 +194,16 @@ class Postcard(object):
     @property
     def bkg(self):
         return self.hdu[1].data['BKG']
-    
-    @property 
+
+    @property
     def barycorr(self):
         return self.hdu[1].data['BARYCORR']
-    
-    
+
+
     @property
     def ffiindex(self):
         return self.hdu[1].data['FFIINDEX']
-    
+
 class Postcard_tesscut(object):
     """TESS FFI data for one postcard across one sector.
     
@@ -210,13 +217,13 @@ class Postcard_tesscut(object):
         Filename of the downloaded postcard.
     location : str, optional
         Filepath to `filename`.
-    
+
     Attributes
     ----------
     dimensions : tuple
         (`x`, `y`, `time`) dimensions of postcard.
     flux, flux_err : numpy.ndarray
-        Arrays of shape `postcard.dimensions` containing flux or error on flux 
+        Arrays of shape `postcard.dimensions` containing flux or error on flux
         for each pixel.
     time : float
         ?
@@ -225,10 +232,10 @@ class Postcard_tesscut(object):
     center_radec : tuple
         RA & Dec coordinates of the postcard's central pixel.
     center_xy : tuple
-        (`x`, `y`) coordinates corresponding to the location of 
+        (`x`, `y`) coordinates corresponding to the location of
         the postcard's central pixel on the FFI.
     origin_xy : tuple
-        (`x`, `y`) coordinates corresponding to the location of 
+        (`x`, `y`) coordinates corresponding to the location of
         the postcard's (0,0) pixel on the FFI.
     """
     def __init__(self, cutout, location=None):
@@ -243,21 +250,21 @@ class Postcard_tesscut(object):
 
     def plot(self, frame=0, ax=None, scale='linear', **kwargs):
         """Plots a single frame of a postcard.
-        
+
         Parameters
         ----------
         frame : int, optional
             Index of frame. Default 0.
-        
+
         ax : matplotlib.axes.Axes, optional
             Axes on which to plot. Creates a new object by default.
-        
+
         scale : str
             Scaling for colorbar; acceptable inputs are 'linear' or 'log'.
             Default 'linear'.
-        
+
         **kwargs : passed to matplotlib.pyplot.imshow
-        
+
         Returns
         -------
         ax : matplotlib.axes.Axes
@@ -360,7 +367,7 @@ class Postcard_tesscut(object):
     @property 
     def barycorr(self):
         return self.hdu[1].data['TIMECORR']
-    
+
     @property
     def ffiindex(self):
         sector = self.header['SECTOR']
