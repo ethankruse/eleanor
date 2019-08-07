@@ -78,7 +78,7 @@ if exists:
     os.remove(fn_path)
     exists = False
 
-ffis = glob(os.path.join(dirname, '*', '*eleanor*postcard*fits'))
+ffis = glob(os.path.join(dirname, '*', '*eleanor*postcard*[0-9].fits'))
 
 if exists:
     t = Table.read(fn_path, format='ascii')
