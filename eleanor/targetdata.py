@@ -694,9 +694,9 @@ class TargetData(object):
         import tensorflow as tf
         from .models import Gaussian, Moffat
         from tqdm import tqdm
-        
+
         tf.compat.v1.logging.set_verbosity(tf.logging.ERROR)
-        
+
         if yc is None:
             yc = 0.5*np.ones(nstars)*np.shape(self.tpf[0])[1]
         if xc is None:
@@ -741,24 +741,24 @@ class TargetData(object):
             a = tf.Variable(initial_value=1., dtype=tf.float64)
             b = tf.Variable(initial_value=0., dtype=tf.float64)
             c = tf.Variable(initial_value=1., dtype=tf.float64)
-        
+
 
             if nstars == 1:
                 mean = gaussian(flux, xc[0]+xshift, yc[0]+yshift, a, b, c)
             else:
                 mean = [gaussian(flux[j], xc[j]+xshift, yc[j]+yshift, a, b, c) for j in range(nstars)]
                 mean = np.sum(mean, axis=0)
-                
+
             var_list = [flux, xshift, yshift, a, b, c, bkg]
-            
-            var_to_bounds = {flux: (0, np.infty), 
+
+            var_to_bounds = {flux: (0, np.infty),
                              xshift: (-1.0, 1.0),
                              yshift: (-1.0, 1.0),
                              a: (0, np.infty),
                              b: (-0.5, 0.5),
                              c: (0, np.infty)
                             }
-            
+
         elif model == 'moffat':
 
             moffat = Moffat(shape=data_arr.shape[1:], col_ref=0, row_ref=0)
@@ -767,17 +767,17 @@ class TargetData(object):
             b = tf.Variable(initial_value=0., dtype=tf.float64)
             c = tf.Variable(initial_value=1., dtype=tf.float64)
             beta = tf.Variable(initial_value=1, dtype=tf.float64)
-        
+
 
             if nstars == 1:
                 mean = moffat(flux, xc[0]+xshift, yc[0]+yshift, a, b, c, beta)
             else:
                 mean = [moffat(flux[j], xc[j]+xshift, yc[j]+yshift, a, b, c, beta) for j in range(nstars)]
                 mean = np.sum(mean, axis=0)
-                
+
             var_list = [flux, xshift, yshift, a, b, c, beta, bkg]
-            
-            var_to_bounds = {flux: (0, np.infty), 
+
+            var_to_bounds = {flux: (0, np.infty),
                              xshift: (-2.0, 2.0),
                              yshift: (-2.0, 2.0),
                              a: (0, 3.0),
@@ -785,15 +785,15 @@ class TargetData(object):
                              c: (0, 3.0),
                              beta: (0, 10)
                             }
-            
+
 
             betaout = np.zeros(len(data_arr))
-            
+
 
         else:
             raise ValueError('This model is not incorporated yet!') # we probably want this to be a warning actually,
                                                                     # and a gentle return
-                
+
         aout = np.zeros(len(data_arr))
         bout = np.zeros(len(data_arr))
         cout = np.zeros(len(data_arr))
@@ -839,7 +839,7 @@ class TargetData(object):
 
             fout[i] = sess.run(flux)
             bkgout[i] = sess.run(bkg)
-            
+
             if model == 'gaussian':
                 aout[i] = sess.run(a)
                 bout[i] = sess.run(b)
@@ -847,7 +847,7 @@ class TargetData(object):
                 xout[i] = sess.run(xshift)
                 yout[i] = sess.run(yshift)
                 llout[i] = sess.run(nll, feed_dict={data:data_arr[i], derr:err_arr[i], bkgval:bkg_arr[i]})
-                
+
             if model == 'moffat':
                 aout[i] = sess.run(a)
                 bout[i] = sess.run(b)
@@ -856,13 +856,13 @@ class TargetData(object):
                 yout[i] = sess.run(yshift)
                 llout[i] = sess.run(nll, feed_dict={data:data_arr[i], derr:err_err[i], bkgval:bkg_arr[i]})
                 betaout[i] = sess.run(beta)
-            
+
 
         sess.close()
 
         self.psf_flux = fout[:,0]
         self.psf_bkg = bkgout
-        
+
         if verbose:
             if model == 'gaussian':
                 self.psf_a = aout
@@ -1106,7 +1106,7 @@ class TargetData(object):
                                      comment='Associated Gaia ID'))
         self.header.append(fits.Card(keyword='SECTOR', value=self.source_info.sector,
                                      comment='Sector'))
-        self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip,
+        self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip.value,
                                      comment='CCD'))
         self.header.append(fits.Card(keyword='CHIPPOS1', value=self.source_info.position_on_chip[0],
                                      comment='central x pixel of TPF in FFI chip'))
@@ -1282,7 +1282,7 @@ class TargetData(object):
         self.all_raw_lc  = []
         self.all_corr_lc = []
         self.all_lc_err  = []
-        
+
         names = []
         for i in cols:
             name = ('_').join(i.split('_')[0:-1])
@@ -1309,7 +1309,7 @@ class TargetData(object):
                 self.post_obj =Postcard_tesscut(self.source_info.cutout,
                                                 location=post_path)
 
-                
+
         self.get_cbvs()
 
         return
