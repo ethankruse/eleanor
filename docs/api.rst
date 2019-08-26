@@ -5,6 +5,8 @@ API
 .. automodule:: eleanor
     :members:
 
+.. autofunction:: multi_sectors
+
 .. autoclass:: Source
     :members:
 
@@ -15,4 +17,7 @@ API
     :members:
 
 .. autoclass:: Visualize
+    :members:
+
+.. autoclass:: Crossmatch
     :members:

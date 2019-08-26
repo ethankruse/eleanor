@@ -22,10 +22,10 @@ observed by TESS and returns, as a single object, a light curve and
 accompanying target pixel data.
 Read the documentation at https://adina.feinste.in/eleanor
 
-Changes to v0.2.4 (2019-07-25):
+Changes to v0.2.7 (2019-08-15):
 
-* Fixed bug in postcard background estimation
-* Included a pixel_by_pixel visualization tool in .visualize
+* eleanor.multi_sectors() works again...
+* Other bug fixes
 """
 
 
@@ -47,8 +47,8 @@ setup(
     package_data={'': ['README.md', 'LICENSE']},
     install_requires=[
         'mplcursors', 'photutils', 'tqdm', 'lightkurve', 'astropy',
-        'astroquery', 'bokeh', 'muchbettermoments', 'fitsio',
-        'setuptools>=41.0.0',
+        'astroquery', 'bokeh', 'muchbettermoments', 'fitsio', 'pandas',
+        'setuptools>=41.0.0', 
         'tensorflow', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point'],
     classifiers=[
         'Development Status :: 3 - Alpha',
