@@ -26,7 +26,7 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
     Parameters
     ----------
     sectors : list or str
-        The list of sectors for which data should be returned, or `all` to return all sectors
+        The list of sectors for which data should be returned, or `'all'` to return all sectors
         for which there are data.
     tic : int, optional
         The TIC ID of the source.
@@ -43,7 +43,7 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
     if sectors == 'all':
         if coords is None:
             if tic is not None:
-                coords, _, _ = coords_from_tic(tic)
+                coords, _, _, _ = coords_from_tic(tic)
             elif gaia is not None:
                 coords = coords_from_gaia(gaia)
 
@@ -51,10 +51,11 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
             if type(coords) is SkyCoord:
                 coords = (coords.ra.degree, coords.dec.degree)
             result = tess_stars2px(8675309, coords[0], coords[1])
-            sector = result[3][result[3] < 12.5]
+            sector = result[3][result[3] < 13.5]
             sectors = sector.tolist()
         print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors))
-    if type(sectors) == list:
+
+    if (type(sectors) == list) or (type(sectors) == np.ndarray):
         for s in sectors:
             star = Source(tic=tic, gaia=gaia, coords=coords, sector=int(s), tc=tc)
             if star.sector is not None:
@@ -64,8 +65,6 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
                           'target may not have been observed yet in these sectors.'
                           ''.format(len(objs), len(sectors)))
         return objs
-    else:
-        raise TypeError("Sectors needs to be either 'all' or a type(list) to work.")
 
 
 def load_postcard_guide(sector, local=False):
@@ -148,7 +147,8 @@ class Source(object):
         self.fn      = fn
         self.premade = False
         self.usr_sec = sector
-        self.tc      = False
+        self.tc      = tc
+        self.contratio = None
         self.local = local
 
         if fn_dir is None:
@@ -182,15 +182,15 @@ class Source(object):
                     assert False, ("Source: invalid coords. Valid input types are: "
                                    "(RA [deg], Dec [deg]) tuple or astropy.coordinates.SkyCoord object.")
 
-                self.tic, self.tess_mag, sep, self.tic_version = tic_from_coords(self.coords)
+                self.tic, self.tess_mag, sep, self.tic_version, self.contratio = tic_from_coords(self.coords)
                 self.gaia = gaia_from_coords(self.coords)
 
             elif self.gaia is not None:
                 self.coords = coords_from_gaia(self.gaia)
-                self.tic, self.tess_mag, sep, self.tic_version = tic_from_coords(self.coords)
+                self.tic, self.tess_mag, sep, self.tic_version, self.contratio = tic_from_coords(self.coords)
 
             elif self.tic is not None:
-                self.coords, self.tess_mag, self.tic_version = coords_from_tic(self.tic)
+                self.coords, self.tess_mag, self.tic_version, self.contratio = coords_from_tic(self.tic)
                 self.gaia = gaia_from_coords(self.coords)
 
             else:
@@ -321,9 +321,19 @@ class Source(object):
 
 
     def locate_with_tesscut(self):
-        """Finds the best TESS postcard(s) and the position of the source on postcard.
-        Sets attributes postcard, position_on_postcard, all_postcards.
-         sector, camera, chip, position_on_chip.
+        """
+        Finds the best TESS postcard(s) and the position of the source on postcard.
+
+        Attributes
+        ----------
+        postcard : list
+        postcard_path : str
+        position_on_postcard : list
+        all_postcards : list
+        sector : int
+        camera : int
+        chip : int
+        position_on_chip : np.array
 
         """
         self.postcard = []

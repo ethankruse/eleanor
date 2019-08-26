@@ -171,11 +171,19 @@ class TargetData(object):
                 self.flux_bkg = self.post_obj.bkg
                 self.get_time(source.coords)
 
-
                 if bkg_size is None:
                     bkg_size = width
 
-                self.crowded_field = crowded_field
+                # Uses the contamination ratio for crowded field if available and
+                # not already set by the user
+                if crowded_field is True:
+                    self.crowded_field = 1
+                else:
+                    if self.source_info.contratio is not None:
+                        self.crowded_field = self.source_info.contratio
+                    else:
+                        self.crowded_field = 0
+
 
                 if cal_cadences is None:
                     self.cal_cadences = (0, len(self.post_obj.time))
@@ -332,10 +340,9 @@ class TargetData(object):
         summed_tpf = np.sum(self.tpf, axis=0)
         mpix = np.unravel_index(summed_tpf.argmax(), summed_tpf.shape)
         if np.abs(mpix[0] - x_length) > 1:
-            self.crowded_field = True
+            self.crowded_field = 1
         if np.abs(mpix[1] - y_length) > 1:
-            self.crowded_field = True
-
+            self.crowded_field = 1
 
         self.bkg_subtraction()
 
@@ -512,7 +519,7 @@ class TargetData(object):
             self.all_lc_err  = np.array(all_lc_err)
             self.all_corr_lc = np.array(all_corr_lc_pc_sub)
 
-            if self.crowded_field == True:
+            if self.crowded_field > 0.15:
                 tpf_stds[ap_size > 8] = 1.0
                 pc_stds[ap_size > 8] = 1.0
 
@@ -565,8 +572,7 @@ class TargetData(object):
             Number of cotrending basis vectors to apply. Default is 8.
         """
         if flux is None:
-#            flux = self.corr_flux
-            flux = self.raw_flux - self.flux_bkg
+            flux = self.raw_flux - (self.flux_bkg * np.sum(self.aperture))
 
         matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/tpfs/pca_components_s{0:04d}_{1}.txt'.format(self.source_info.sector,
                                                                                                                             self.source_info.camera))
@@ -638,6 +644,10 @@ class TargetData(object):
             c_frame = [cen[0]+c_0[0], cen[1]+c_0[1]]
             self.x_com.append(c_frame[0])
             self.y_com.append(c_frame[1])
+
+        self.x_com = np.array(self.x_com)
+        self.y_com = np.array(self.y_com)
+
         return
 
 
@@ -694,23 +704,23 @@ class TargetData(object):
         import tensorflow as tf
         from .models import Gaussian, Moffat
         from tqdm import tqdm
-        
+
         tf.logging.set_verbosity(tf.logging.ERROR)
-      
-        if yc is None:
-            yc = 0.5*np.ones(nstars)*np.shape(self.tpf[0])[1]
-        if xc is None:
-            xc = 0.5*np.ones(nstars)*np.shape(self.tpf[0])[0]
 
         if data_arr is None:
             data_arr = self.tpf + 0.0
         if err_arr is None:
             if err_method == True:
-                err_arr = (self.tpf_err + 0.0)**2
+                err_arr = (self.tpf_err + 0.0) ** 2
             else:
                 err_arr = np.ones_like(data_arr)
         if bkg_arr is None:
             bkg_arr = self.flux_bkg + 0.0
+
+        if yc is None:
+            yc = 0.5 * np.ones(nstars) * np.shape(data_arr[0])[1]
+        if xc is None:
+            xc = 0.5 * np.ones(nstars) * np.shape(data_arr[0])[0]
 
         dsum = np.sum(data_arr, axis=(0))
         modepix = np.where(dsum == mode(dsum, axis=None)[0][0])
@@ -719,6 +729,7 @@ class TargetData(object):
                 err_arr[i][modepix] = np.inf
 
         if ignore_pixels is not None:
+            tpfsum = np.sum(data_arr, axis=(0))
             percentile = 100-ignore_pixels
             tpfsum[int(xc[0]-1.5):int(xc[0]+2.5),int(yc[0]-1.5):int(yc[0]+2.5)] = 0.0
             err_arr[:, tpfsum > np.percentile(dsum, percentile)] = np.inf
@@ -854,7 +865,7 @@ class TargetData(object):
                 cout[i] = sess.run(c)
                 xout[i] = sess.run(xshift)
                 yout[i] = sess.run(yshift)
-                llout[i] = sess.run(nll, feed_dict={data:data_arr[i], derr:err_err[i], bkgval:bkg_arr[i]})
+                llout[i] = sess.run(nll, feed_dict={data:data_arr[i], derr:err_arr[i], bkgval:bkg_arr[i]})
                 betaout[i] = sess.run(beta)
 
 
@@ -885,7 +896,7 @@ class TargetData(object):
 
 
 
-    def custom_aperture(self, shape=None, r=0.0, l=0.0, w=0.0, theta=0.0, pos=None, method='exact'):
+    def custom_aperture(self, shape=None, r=0.0, h=0.0, w=0.0, theta=0.0, pos=None, method='exact'):
         """
         Creates a custom circular or rectangular aperture of arbitrary size.
 
@@ -895,7 +906,7 @@ class TargetData(object):
             The shape of the aperture to be used. Must be either `circle` or `rectangle.`
         r: float, optional
             If shape is `circle` the radius of the circular aperture to be used.
-        l: float, optional
+        h: float, optional
             If shape is `rectangle` the length of the rectangular aperture to be used.
         w: float, optional
             If shape is `rectangle` the width of the rectangular aperture to be used.
@@ -926,10 +937,10 @@ class TargetData(object):
                             np.shape(self.tpf[0]))))
 
         elif shape == 'rectangle':
-            if l==0.0 or w==0.0:
-                raise Exception("For a rectangular aperture, please set both length and width: custom_aperture(shape='rectangle', l=#, w=#)")
+            if h==0.0 or w==0.0:
+                raise Exception("For a rectangular aperture, please set both length and width: custom_aperture(shape='rectangle', h=#, w=#, theta=#)")
             else:
-                aperture = RectangularAperture(pos, l=l, w=w, t=theta)
+                aperture = RectangularAperture(pos, h=h, w=w, theta=theta)
                 self.aperture = aperture.to_mask(method=method)[0].to_image(shape=((
                             np.shape(self.tpf[0]))))
         else:
