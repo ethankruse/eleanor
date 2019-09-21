@@ -22,9 +22,10 @@ observed by TESS and returns, as a single object, a light curve and
 accompanying target pixel data.
 Read the documentation at https://adina.feinste.in/eleanor
 
-Changes to v0.2.7 (2019-08-15):
+Changes to v0.2.8 (2019-08-15):
 
-* eleanor.multi_sectors() works again...
+* Fixed PCA flux bug
+* Updated to include Sector 14
 * Other bug fixes
 """
 
@@ -49,7 +50,7 @@ setup(
         'mplcursors', 'photutils', 'tqdm', 'lightkurve>=1.1.0', 'astropy',
         'astroquery', 'bokeh', 'muchbettermoments', 'fitsio', 'pandas',
         'setuptools>=41.0.0', 
-        'tensorflow<=1.14.0', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point'],
+        'tensorflow<=1.14.0', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point<=0.3.1'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
