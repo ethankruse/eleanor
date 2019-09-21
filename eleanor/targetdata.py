@@ -596,20 +596,26 @@ class TargetData(object):
         Parameters
         ----------
         """
+        
+        try:
+            if local:
+                ldir = os.path.split(os.path.split(__file__)[0])[0]
+                matrix_file = 'metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector, self.source_info.camera, self.source_info.chip)
+                matrix_file = os.path.join(ldir, matrix_file)
+                cbvs = np.loadtxt(matrix_file)
+            else:
+    
+                matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector,
+                                                                                                                                                             self.source_info.camera,
+                                                                                                                                                             self.source_info.chip))
+                A = [float(x) for x in matrix_file.read().decode('utf-8').split()]
+                cbvs = np.asarray(A)
+                cbvs = np.reshape(cbvs, (len(self.time), 16))
+        
+            self.cbvs = cbvs
 
-        if local:
-            ldir = os.path.split(os.path.split(__file__)[0])[0]
-            matrix_file = 'metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector, self.source_info.camera, self.source_info.chip)
-            matrix_file = os.path.join(ldir, matrix_file)
-            cbvs = np.loadtxt(matrix_file)
-        else:
-            matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector,
-                                                                                                                                                         self.source_info.camera,
-                                                                                                                                                         self.source_info.chip))
-            A = [float(x) for x in matrix_file.read().decode('utf-8').split()]
-            cbvs = np.asarray(A)
-            cbvs = np.reshape(cbvs, (len(self.time), 16))
-        self.cbvs = cbvs
+        except:
+            self.cbvs = np.zeros((len(self.time), 16))
         return
 
 
@@ -995,6 +1001,9 @@ class TargetData(object):
 
         if flux is None:
             flux = self.raw_flux
+            
+        if pca == True:
+            flux = self.raw_flux - self.flux_bkg*np.sum(self.aperture)
 
         flux = np.array(flux)
 
@@ -1047,16 +1056,14 @@ class TargetData(object):
             bkg -= np.min(bkg)
 
             vv = self.cbvs[mask][:,0:modes]
-
-
+                   
             if pca == False:
                 cm = np.column_stack((t[mask][qm][skip:], np.ones_like(t[mask][qm][skip:])))
                 cm_full = np.column_stack((t[mask], np.ones_like(t[mask])))
-
-
-                cm = np.column_stack((cm, vv[qm][skip:]))
-                cm_full = np.column_stack((cm_full, vv))
-
+                
+                if np.std(vv) > 1e-10:
+                    cm = np.column_stack((cm, vv[qm][skip:]))
+                    cm_full = np.column_stack((cm_full, vv))
 
                 if np.std(bkg) > 1e-10:
                     cm = np.column_stack((cm, bkg[qm][skip:]))
@@ -1067,6 +1074,7 @@ class TargetData(object):
                     cm_full = np.column_stack((cm_full, cx, cy, cx**2, cy**2))
 
             else:
+                
                 cm = np.column_stack((vv[qm][skip:], np.ones_like(t[mask][qm][skip:])))
                 cm_full = np.column_stack((vv, np.ones_like(t[mask])))
 
