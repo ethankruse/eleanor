@@ -501,7 +501,6 @@ class TargetData(object):
                     continue
 
                 q = self.quality == 0
-
                 lc_obj_tpf = lightcurve.LightCurve(time = self.time[q][self.cal_cadences[0]:self.cal_cadences[1]],
                                        flux = all_corr_lc_tpf_sub[a][q][self.cal_cadences[0]:self.cal_cadences[1]])
                 flat_lc_tpf = lc_obj_tpf.flatten(polyorder=2, window_length=51)
@@ -1117,8 +1116,14 @@ class TargetData(object):
                                      comment='Associated Gaia ID'))
         self.header.append(fits.Card(keyword='SECTOR', value=self.source_info.sector,
                                      comment='Sector'))
-        self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip.value,
-                                     comment='CCD'))
+        # TESSCut needs the .value, but postcards break when you do that?
+        try:
+            self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip.value,
+                                         comment='CCD'))
+        except AttributeError:
+            self.header.append(
+                fits.Card(keyword='CHIP', value=self.source_info.chip,
+                          comment='CCD'))
         self.header.append(fits.Card(keyword='CHIPPOS1', value=self.source_info.position_on_chip[0],
                                      comment='central x pixel of TPF in FFI chip'))
         self.header.append(fits.Card(keyword='CHIPPOS2', value=self.source_info.position_on_chip[1],
