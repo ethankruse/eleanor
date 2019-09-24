@@ -28,7 +28,7 @@ def get_headers(cards, exists=False, t=None):
 
                 counts = np.array(counts)
 
-                dtype = ['S60' for _ in range(len(names))]
+                dtype = ['S80' for _ in range(len(names))]
                 t = Table(names=names, dtype=dtype)
 
             elif i == 0 and exists:
@@ -78,7 +78,7 @@ if exists:
     os.remove(fn_path)
     exists = False
 
-ffis = glob(os.path.join(dirname, '*', '*eleanor*postcard*[0-9].fits'))
+ffis = glob(os.path.join(dirname, '*', '*eleanor*postcard*[0-9]_pc.fits'))
 
 if exists:
     t = Table.read(fn_path, format='ascii')

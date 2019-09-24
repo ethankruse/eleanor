@@ -36,7 +36,7 @@ for sector in sectors:
             print(f'dir {postfile} does not exist; skipping')
             continue
 
-        postfile = glob(os.path.join(postfile, '*[0-9].fits'))[0]
+        postfile = glob(os.path.join(postfile, '*[0-9]_pc.fits'))[0]
         hdu = fits.open(postfile)
         tstart = hdu[1].data['tstart']
         tend = hdu[1].data['tstop']
