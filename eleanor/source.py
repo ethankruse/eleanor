@@ -51,7 +51,7 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
             if type(coords) is SkyCoord:
                 coords = (coords.ra.degree, coords.dec.degree)
             result = tess_stars2px(8675309, coords[0], coords[1])
-            sector = result[3][result[3] < 14.5]
+            sector = result[3][result[3] < 15.5]
             sectors = sector.tolist()
 
         if sectors[0] < 0:
@@ -173,7 +173,16 @@ class Source(object):
             self.premade  = True
             self.sector   = hdr['SECTOR']
             self.camera   = hdr['CAMERA']
-            self.chip     = hdr['CHIP']
+            self.chip     = hdr['CCD']
+            self.tc       = hdr['TESSCUT']
+            self.tic_version = hdr['TIC_V']
+            self.postcard = hdr['POSTCARD']
+
+            if self.tc is True:
+                post_dir = self.tesscut_dir()
+                self.postcard_path = os.path.join(post_dir, self.postcard)
+                self.cutout = fits.open(self.postcard_path)
+
             self.position_on_chip = (hdr['CHIPPOS1'], hdr['CHIPPOS2'])
 
         else:
@@ -351,8 +360,8 @@ class Source(object):
         sector_table = Tesscut.get_sectors(coord)
         self.sector = self.usr_sec
 
-        self.camera = sector_table[sector_table['sector'] == self.sector]['camera'].quantity[0]
-        self.chip = sector_table[sector_table['sector'] == self.sector]['ccd'].quantity[0]
+        self.camera = sector_table[sector_table['sector'] == self.sector]['camera'].quantity[0].value
+        self.chip = sector_table[sector_table['sector'] == self.sector]['ccd'].quantity[0].value
 
         download_dir = self.tesscut_dir()
 
@@ -365,8 +374,8 @@ class Source(object):
         else:
             self.postcard_path = fn_exists
             cutout = fits.open(fn_exists)
-
-        self.cutout = cutout
+        self.cutout   = cutout
+        self.postcard = self.postcard_path.split('/')[-1]
 
         xcoord = cutout[1].header['1CRV4P']
         ycoord = cutout[1].header['2CRV4P']
