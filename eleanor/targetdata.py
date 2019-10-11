@@ -131,12 +131,13 @@ class TargetData(object):
 
     Extension[2] = (3, N_time) time, raw flux, systematics corrected flux
     """
-
     def __init__(self, source, height=13, width=13, save_postcard=True,
                  do_pca=False, do_psf=False, bkg_size=None, crowded_field=False,
-                 cal_cadences=None, try_load=True, local=False, localdir=None):
+                 cal_cadences=None, try_load=True, language='English', local=False, localdir=None):
         self.source_info = source
-
+        self.language = language
+        self.pca_flux = None
+        self.psf_flux = None
 
         if self.source_info.premade:
             self.load(directory=self.source_info.fn_dir)
@@ -464,6 +465,9 @@ class TargetData(object):
 
         self.flux_err = None
 
+        if self.language == 'Australian':
+            print("G'day Mate! ʕ •ᴥ•ʔ Your light curves are being translated ...")
+
         if (self.aperture is None):
 
             self.all_lc_err  = None
@@ -517,6 +521,14 @@ class TargetData(object):
             self.all_raw_lc  = np.array(all_raw_lc_pc_sub)
             self.all_lc_err  = np.array(all_lc_err)
             self.all_corr_lc = np.array(all_corr_lc_pc_sub)
+
+            if self.language == 'Australian':
+                for i in range(len(self.all_raw_lc)):
+                    med = np.nanmedian(self.all_raw_lc[i])
+                    self.all_raw_lc[i] = (med-self.all_raw_lc[i]) + med
+
+                    med = np.nanmedian(self.all_corr_lc[i])
+                    self.all_corr_lc[i] = (med-self.all_corr_lc[i]) + med
 
             if self.crowded_field > 0.15:
                 tpf_stds[ap_size > 8] = 1.0
@@ -591,12 +603,15 @@ class TargetData(object):
         self.modes    = modes
         self.pca_flux = flux - np.dot(A[:,0:modes], matrix(flux)[0:modes])
 
+        if self.language == 'Australian':
+            self.pca_flux = (np.nanmedian(self.pca_flux) - self.pca_flux) + np.nanmedian(self.pca_flux)
+
     def get_cbvs(self, local=False):
         """ Obtains the cotrending basis vectors (CBVs) as convolved down from the short-cadence targets.
         Parameters
         ----------
         """
-        
+
         try:
             if local:
                 ldir = os.path.split(os.path.split(__file__)[0])[0]
@@ -604,14 +619,14 @@ class TargetData(object):
                 matrix_file = os.path.join(ldir, matrix_file)
                 cbvs = np.loadtxt(matrix_file)
             else:
-    
+
                 matrix_file = urlopen('https://archipelago.uchicago.edu/tess_postcards/metadata/s{0:04d}/cbv_components_s{0:04d}_{1:04d}_{2:04d}.txt'.format(self.source_info.sector,
                                                                                                                                                              self.source_info.camera,
                                                                                                                                                              self.source_info.chip))
                 A = [float(x) for x in matrix_file.read().decode('utf-8').split()]
                 cbvs = np.asarray(A)
                 cbvs = np.reshape(cbvs, (len(self.time), 16))
-        
+
             self.cbvs = cbvs
 
         except:
@@ -877,6 +892,10 @@ class TargetData(object):
         sess.close()
 
         self.psf_flux = fout[:,0]
+
+        if self.language == 'Australian':
+            self.psf_flux = (np.nanmedian(self.psf_flux) - self.psf_flux) + np.nanmedian(self.psf_flux)
+
         self.psf_bkg = bkgout
 
         if verbose:
@@ -938,7 +957,7 @@ class TargetData(object):
                 raise Exception("Please set a radius (in pixels) for your aperture")
             else:
                 aperture = CircularAperture(pos, r=r)
-                self.aperture = aperture.to_mask(method=method)[0].to_image(shape=((
+                self.aperture = aperture.to_mask(method=method).to_image(shape=((
                             np.shape(self.tpf[0]))))
 
         elif shape == 'rectangle':
@@ -946,8 +965,9 @@ class TargetData(object):
                 raise Exception("For a rectangular aperture, please set both length and width: custom_aperture(shape='rectangle', h=#, w=#, theta=#)")
             else:
                 aperture = RectangularAperture(pos, h=h, w=w, theta=theta)
-                self.aperture = aperture.to_mask(method=method)[0].to_image(shape=((
+                self.aperture = aperture.to_mask(method=method).to_image(shape=((
                             np.shape(self.tpf[0]))))
+
         else:
             raise ValueError("Aperture shape not recognized. Please set shape == 'circle' or 'rectangle'")
 
@@ -1001,7 +1021,7 @@ class TargetData(object):
 
         if flux is None:
             flux = self.raw_flux
-            
+
         if pca == True:
             flux = self.raw_flux - self.flux_bkg*np.sum(self.aperture)
 
@@ -1056,11 +1076,11 @@ class TargetData(object):
             bkg -= np.min(bkg)
 
             vv = self.cbvs[mask][:,0:modes]
-                   
+
             if pca == False:
                 cm = np.column_stack((t[mask][qm][skip:], np.ones_like(t[mask][qm][skip:])))
                 cm_full = np.column_stack((t[mask], np.ones_like(t[mask])))
-                
+
                 if np.std(vv) > 1e-10:
                     cm = np.column_stack((cm, vv[qm][skip:]))
                     cm_full = np.column_stack((cm_full, vv))
@@ -1074,7 +1094,7 @@ class TargetData(object):
                     cm_full = np.column_stack((cm_full, cx, cy, cx**2, cy**2))
 
             else:
-                
+
                 cm = np.column_stack((vv[qm][skip:], np.ones_like(t[mask][qm][skip:])))
                 cm_full = np.column_stack((vv, np.ones_like(t[mask])))
 
@@ -1124,20 +1144,16 @@ class TargetData(object):
                                      comment='Associated Gaia ID'))
         self.header.append(fits.Card(keyword='SECTOR', value=self.source_info.sector,
                                      comment='Sector'))
-        # TESSCut needs the .value, but postcards break when you do that?
-        try:
-            self.header.append(fits.Card(keyword='CHIP', value=self.source_info.chip.value,
-                                         comment='CCD'))
-        except AttributeError:
-            self.header.append(
-                fits.Card(keyword='CHIP', value=self.source_info.chip,
-                          comment='CCD'))
+        self.header.append(fits.Card(keyword='CAMERA', value=self.source_info.camera,
+                                     comment='Camera'))
+        self.header.append(fits.Card(keyword='CCD', value=self.source_info.chip,
+                                     comment='CCD'))
         self.header.append(fits.Card(keyword='CHIPPOS1', value=self.source_info.position_on_chip[0],
                                      comment='central x pixel of TPF in FFI chip'))
         self.header.append(fits.Card(keyword='CHIPPOS2', value=self.source_info.position_on_chip[1],
                                      comment='central y pixel of TPF in FFI'))
-#        self.header.append(fits.Card(keyword='POSTCARD', value=self.source_info.postcard,
-#                                     comment=''))
+        self.header.append(fits.Card(keyword='POSTCARD', value=self.source_info.postcard,
+                                     comment=''))
 #        self.header.append(fits.Card(keyword='POSTPOS1', value= self.source_info.position_on_postcard[0],
 #                                     comment='predicted x pixel of source on postcard'))
 #        self.header.append(fits.Card(keyword='POSTPOS2', value= self.source_info.position_on_postcard[1],
@@ -1149,7 +1165,9 @@ class TargetData(object):
         self.header.append(fits.Card(keyword='TPF_H', value=np.shape(self.tpf[0])[0],
                                      comment='Height of the TPF in pixels'))
         self.header.append(fits.Card(keyword='TPF_W', value=np.shape(self.tpf[0])[1],
-                                           comment='Width of the TPF in pixels'))
+                                     comment='Width of the TPF in pixels'))
+        self.header.append(fits.Card(keyword='TESSCUT', value=self.source_info.tc,
+                                     comment='If TessCut was used to make this TPF'))
 
         if self.source_info.tc == False:
             self.header.append(fits.Card(keyword='BKG_SIZE', value=np.shape(self.bkg_tpf[0])[1],
@@ -1175,6 +1193,8 @@ class TargetData(object):
         directory : str, optional
             Directory to save file into.
         """
+        if self.language == 'Australian':
+            raise ValueError("These light curves are upside down. Please don't save them ...")
 
         self.set_header()
 
@@ -1332,7 +1352,7 @@ class TargetData(object):
                                          location=post_path)
         else:
             self.post_obj =Postcard_tesscut(self.source_info.cutout,
-                                            location=post_path)
+                                            location=self.source_info.postcard_path)
 
 
         self.get_cbvs()

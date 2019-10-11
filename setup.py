@@ -24,8 +24,7 @@ Read the documentation at https://adina.feinste.in/eleanor
 
 Changes to v0.2.8 (2019-08-15):
 
-* Fixed PCA flux bug
-* Updated to include Sector 14
+* Updated to include Sector 15
 * Other bug fixes
 """
 
@@ -50,7 +49,7 @@ setup(
         'mplcursors', 'photutils', 'tqdm', 'lightkurve>=1.1.0', 'astropy',
         'astroquery', 'bokeh', 'muchbettermoments', 'fitsio', 'pandas',
         'setuptools>=41.0.0', 
-        'tensorflow<=1.14.0', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point<=0.3.1'],
+        'tensorflow<=1.14.0', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
