@@ -3,12 +3,13 @@
 
 from __future__ import division, print_function
 
-import os
 import sys
+
+import setuptools
 from setuptools import setup
 
 sys.path.insert(0, "eleanor")
-from version import __version__
+from version import __version__  
 
 
 long_description = \
@@ -20,7 +21,14 @@ takes a TIC ID, a Gaia source ID, or (RA, Dec) coordinates of a star
 observed by TESS and returns, as a single object, a light curve and
 accompanying target pixel data.
 Read the documentation at https://adina.feinste.in/eleanor
+
+Changes to v0.2.10 (2019-11-07):
+
+* Updated to include Sector 16
+* Handling edge cases with TessCut
+* Other bug fixes
 """
+
 
 
 setup(
@@ -39,12 +47,10 @@ setup(
     long_description_content_type="text/markdown",
     package_data={'': ['README.md', 'LICENSE']},
     install_requires=[
-        'mplcursors', 'photutils', 'tqdm', 'lightkurve', 'astropy',
-        'astroquery', 'bokeh', 'muchbettermoments', 'fitsio',
-        'setuptools>=41.0.0',
-        'tensorflow', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point'],
-
-
+        'mplcursors', 'photutils', 'tqdm', 'lightkurve>=1.1.0', 'astropy',
+        'astroquery', 'bokeh', 'muchbettermoments', 'fitsio', 'pandas',
+        'setuptools>=41.0.0', 
+        'tensorflow<=1.14.0', 'vaneska', 'beautifulsoup4>=4.6.0', 'tess-point'],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',

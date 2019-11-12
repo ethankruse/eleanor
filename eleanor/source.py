@@ -25,22 +25,25 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
 
     Parameters
     ----------
+    sectors : list or str
+        The list of sectors for which data should be returned, or `'all'` to return all sectors
+        for which there are data.
     tic : int, optional
         The TIC ID of the source.
     gaia : int, optional
         The Gaia DR2 source_id.
     coords : tuple, optional
         The (RA, Dec) coords of the object in degrees.
-    sectors : list or str
-        The list of sectors for which data should be returned, or `all` to return all sectors
-        for which there are data.
+    tc : bool, optional
+        If True, use a TessCut cutout to produce postcards rather than downloading the eleanor
+        postcard data products.
     """
     objs = []
 
     if sectors == 'all':
         if coords is None:
             if tic is not None:
-                coords, _, _ = coords_from_tic(tic)
+                coords, _, _, _ = coords_from_tic(tic)
             elif gaia is not None:
                 coords = coords_from_gaia(gaia)
 
@@ -48,10 +51,15 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
             if type(coords) is SkyCoord:
                 coords = (coords.ra.degree, coords.dec.degree)
             result = tess_stars2px(8675309, coords[0], coords[1])
-            sector = result[3][result[3] < 11.5]
+            sector = result[3][result[3] < 16.5]
             sectors = sector.tolist()
-        print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors))
-    if type(sectors) == list:
+
+        if sectors[0] < 0:
+            raise SearchError("Your target is not observed by TESS.")
+        else:
+            print('Found star in Sector(s) ' +" ".join(str(x) for x in sectors))
+
+    if (type(sectors) == list) or (type(sectors) == np.ndarray):
         for s in sectors:
             star = Source(tic=tic, gaia=gaia, coords=coords, sector=int(s), tc=tc)
             if star.sector is not None:
@@ -61,8 +69,6 @@ def multi_sectors(sectors, tic=None, gaia=None, coords=None, tc=False):
                           'target may not have been observed yet in these sectors.'
                           ''.format(len(objs), len(sectors)))
         return objs
-    else:
-        raise TypeError("Sectors needs to be either 'all' or a type(list) to work.")
 
 
 def load_postcard_guide(sector):
@@ -104,6 +110,9 @@ class Source(object):
     sector : int or str
         The sector for which data should be returned, or `recent` to
         obtain data for the most recent sector which contains this target.
+    tc : bool, optional
+        If True, use a TessCut cutout to produce postcards rather than downloading the eleanor
+        postcard data products.
 
     Attributes
     ----------
@@ -126,13 +135,14 @@ class Source(object):
         Names of all postcards where the source appears.
     """
     def __init__(self, tic=None, gaia=None, coords=None, fn=None, sector=None, fn_dir=None, tc=False):
-        self.tic     = tic
-        self.gaia    = gaia
-        self.coords  = coords
-        self.fn      = fn
-        self.premade = False
-        self.usr_sec = sector
-        self.tc      = False
+        self.tic       = tic
+        self.gaia      = gaia
+        self.coords    = coords
+        self.fn        = fn
+        self.premade   = False
+        self.usr_sec   = sector
+        self.tc        = tc
+        self.contratio = None
 
         if fn_dir is None:
             self.fn_dir = os.path.join(os.path.expanduser('~'), '.eleanor')
@@ -152,29 +162,38 @@ class Source(object):
             self.premade  = True
             self.sector   = hdr['SECTOR']
             self.camera   = hdr['CAMERA']
-            self.chip     = hdr['CHIP']
+            self.chip     = hdr['CCD']
+            self.tc       = hdr['TESSCUT']
+            self.tic_version = hdr['TIC_V']
+            self.postcard = hdr['POSTCARD']
+
+            if self.tc is True:
+                post_dir = self.tesscut_dir()
+                self.postcard_path = os.path.join(post_dir, self.postcard)
+                self.cutout = fits.open(self.postcard_path)
+
             self.position_on_chip = (hdr['CHIPPOS1'], hdr['CHIPPOS2'])
-            self.position_on_postcard = (hdr['POSTPOS1'], hdr['POSTPOS2'])
+#            self.position_on_postcard = (hdr['POSTPOS1'], hdr['POSTPOS2'])
 
         else:
             if self.coords is not None:
                 if type(self.coords) is SkyCoord:
                     self.coords = (self.coords.ra.degree, self.coords.dec.degree)
-                elif (len(self.coords) == 2) & all(isinstance(c, float) for c in self.coords):
+                elif (len(self.coords) == 2) & (all(isinstance(c, float) for c in self.coords) | all(isinstance(c, int) for c in self.coords) ):
                     self.coords  = coords
                 else:
                     assert False, ("Source: invalid coords. Valid input types are: "
                                    "(RA [deg], Dec [deg]) tuple or astropy.coordinates.SkyCoord object.")
 
-                self.tic, self.tess_mag, sep, self.tic_version = tic_from_coords(self.coords)
+                self.tic, self.tess_mag, sep, self.tic_version, self.contratio = tic_from_coords(self.coords)
                 self.gaia = gaia_from_coords(self.coords)
 
             elif self.gaia is not None:
                 self.coords = coords_from_gaia(self.gaia)
-                self.tic, self.tess_mag, sep, self.tic_version = tic_from_coords(self.coords)
+                self.tic, self.tess_mag, sep, self.tic_version, self.contratio = tic_from_coords(self.coords)
 
             elif self.tic is not None:
-                self.coords, self.tess_mag, self.tic_version = coords_from_tic(self.tic)
+                self.coords, self.tess_mag, self.tic_version, self.contratio = coords_from_tic(self.tic)
                 self.gaia = gaia_from_coords(self.coords)
 
             else:
@@ -306,10 +325,20 @@ class Source(object):
         
 
     def locate_with_tesscut(self):
-        """Finds the best TESS postcard(s) and the position of the source on postcard.
-        Sets attributes postcard, position_on_postcard, all_postcards.
-         sector, camera, chip, position_on_chip.
-        
+        """
+        Finds the best TESS postcard(s) and the position of the source on postcard.
+
+        Attributes
+        ----------
+        postcard : list
+        postcard_path : str
+        position_on_postcard : list 
+        all_postcards : list
+        sector : int
+        camera : int
+        chip : int
+        position_on_chip : np.array
+
         """
         self.postcard = []
         self.position_on_postcard = []
@@ -321,8 +350,9 @@ class Source(object):
         
         sector_table = Tesscut.get_sectors(coord)
         self.sector = self.usr_sec
-        self.camera = sector_table[sector_table['sector'] == self.sector]['camera'].quantity[0]
-        self.chip = sector_table[sector_table['sector'] == self.sector]['ccd'].quantity[0]
+
+        self.camera = sector_table[sector_table['sector'] == self.sector]['camera'].quantity[0].value
+        self.chip = sector_table[sector_table['sector'] == self.sector]['ccd'].quantity[0].value
 
         download_dir = self.tesscut_dir()
 
@@ -336,8 +366,9 @@ class Source(object):
             self.postcard_path = fn_exists
             cutout = fits.open(fn_exists)
         
-        self.cutout = cutout
-        
+        self.cutout   = cutout
+        self.postcard = self.postcard_path.split('/')[-1]
+
         xcoord = cutout[1].header['1CRV4P']
         ycoord = cutout[1].header['2CRV4P']
         
@@ -347,8 +378,8 @@ class Source(object):
     def search_tesscut(self, download_dir, coords):
         """Searches to see if the TESSCut cutout has already been downloaded.
         """
-        ra  = np.round(coords.ra.deg,  6)
-        dec = np.round(coords.dec.deg, 6)
+        ra =  format(coords.ra.deg, '.6f')
+        dec = format(coords.dec.deg, '.6f')
 
         tesscut_fn = "tess-s{0:04d}-{1}-{2}_{3}_{4}_{5}x{5}_astrocut.fits".format(self.sector,
                                                                                   self.camera,
